@@ -7,6 +7,23 @@ local LocalPlayer = Players.LocalPlayer
 local UserInputService = game:GetService("UserInputService")
 local MarketplaceService = game:GetService("MarketplaceService")
 
+local function detectDevice()
+    local platform = UserInputService:GetPlatform()
+    local deviceType = "Unknown"
+    
+    if platform == Enum.Platform.Windows or platform == Enum.Platform.OSX or platform == Enum.Platform.UWP then
+        deviceType = "PC"
+    elseif platform == Enum.Platform.IOS or platform == Enum.Platform.Android then
+        deviceType = "Mobile"
+    elseif UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then
+        deviceType = "Mobile"
+    elseif UserInputService.KeyboardEnabled and UserInputService.MouseEnabled then
+        deviceType = "PC"
+    end
+    
+    return deviceType, platform
+end
+
 local Linux = {}
 Linux.CurrentTheme = "Orange"
 Linux.SelectedTheme = "Orange"
@@ -19,6 +36,7 @@ Linux.Themes = {
 }
 Linux.AccentElements = {}
 Linux.CurrentTab = nil
+Linux.DeviceType = detectDevice()
 
 function Linux.Instance(class, props)
     local inst = Instance.new(class)
@@ -112,7 +130,7 @@ function Linux:SafeCallback(Function, ...)
 end
 
 function Linux:Notify(config)
-    local isMobile = InputService.TouchEnabled and not InputService.KeyboardEnabled
+    local isMobile = Linux.DeviceType == "Mobile"
     local notificationWidth = isMobile and 200 or 300
     local notificationHeight = config.SubContent and 80 or 60
     local startPosX = isMobile and 10 or 20
@@ -596,7 +614,7 @@ function Linux.Create(config)
         end
     end)
     
-    local isMobile = InputService.TouchEnabled and not InputService.KeyboardEnabled
+    local isMobile = Linux.DeviceType == "Mobile"
     local uiSize = isMobile and (config.SizeMobile or UDim2.fromOffset(300, 500)) or (config.SizePC or UDim2.fromOffset(550, 355))
     
     local Shadow = Linux.Instance("ImageLabel", {
@@ -621,8 +639,9 @@ function Linux.Create(config)
         BorderSizePixel = 1,
         Size = UDim2.new(0, 0, 0, 0),
         Position = UDim2.new(0.5, 0, 0.5, 0),
+        AnchorPoint = Vector2.new(0.5, 0.5),
         Active = true,
-        Draggable = true,
+        Draggable = false,
         ZIndex = 1
     })
     
@@ -637,10 +656,14 @@ function Linux.Create(config)
         Thickness = 1
     })
     
+    local isDraggingMain = false
+    local dragStartMain = nil
+    local startPosMain = nil
+    local startPosShadow = nil
+    
     local openingTween = TweenInfo.new(0.6, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
     TweenService:Create(Main, openingTween, {
-        Size = uiSize,
-        Position = UDim2.new(0.5, -uiSize.X.Offset / 2, 0.5, -uiSize.Y.Offset / 2)
+        Size = uiSize
     }):Play()
     TweenService:Create(Shadow, openingTween, {
         Size = UDim2.new(0, uiSize.X.Offset + 120, 0, uiSize.Y.Offset + 116)
@@ -712,6 +735,44 @@ function Linux.Create(config)
         Parent = TopBar,
         CornerRadius = UDim.new(0, 8)
     })
+    
+    TopBar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            isDraggingMain = true
+            dragStartMain = input.Position
+            startPosMain = Main.Position
+            startPosShadow = Shadow.Position
+        end
+    end)
+    
+    TopBar.InputChanged:Connect(function(input)
+        if isDraggingMain and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - dragStartMain
+            
+            local mainNewX = startPosMain.X.Offset + delta.X
+            local mainNewY = startPosMain.Y.Offset + delta.Y
+            
+            local shadowNewX = startPosShadow.X.Offset + delta.X
+            local shadowNewY = startPosShadow.Y.Offset + delta.Y
+            
+            Main.Position = UDim2.new(startPosMain.X.Scale, mainNewX, startPosMain.Y.Scale, mainNewY)
+            Shadow.Position = UDim2.new(startPosShadow.X.Scale, shadowNewX, startPosShadow.Y.Scale, shadowNewY)
+        end
+    end)
+    
+    TopBar.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            isDraggingMain = false
+        end
+    end)
+    
+    InputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            if isDraggingMain then
+                isDraggingMain = false
+            end
+        end
+    end)
     
     local TopBarLine = Linux.Instance("Frame", {
         Parent = Main,
